@@ -1,0 +1,67 @@
+{
+  "name": "yapi2ts",
+  "displayName": "YAPI 转 TypeScript",
+  "description": "将YAPI接口定义转换为TypeScript类型定义",
+  "version": "1.0.0",
+  "publisher": "vscode-plugin",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:yapi2ts.generateTypes",
+    "onCommand:yapi2ts.setToken"
+  ],
+  "main": "dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "yapi2ts.generateTypes",
+        "title": "YAPI 转 TypeScript: 生成接口定义"
+      },
+      {
+        "command": "yapi2ts.setToken",
+        "title": "YAPI 转 TypeScript: 设置项目Token"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "yapi2ts-view",
+          "title": "YAPI 转 TypeScript",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "yapi2ts-view": [
+        {
+          "type": "webview",
+          "id": "yapi2ts.webview",
+          "name": "接口选择器"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "build": "webpack",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.70.0",
+    "@types/node": "^18.0.0",
+    "@types/mocha": "^10.0.0",
+    "ts-loader": "^9.3.0",
+    "typescript": "^5.0.0",
+    "webpack": "^5.70.0",
+    "webpack-cli": "^4.9.0"
+  },
+  "dependencies": {
+    "node-fetch": "^3.2.0"
+  }
+}
