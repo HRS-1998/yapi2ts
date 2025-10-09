@@ -5,7 +5,6 @@ import fetch from 'node-fetch';
 // 引入config.ts中的接口定义
 import {
   getProjectInfo,
-  getInterfaceList,
   getMenuInterfaceList,
   getSingleInterface,
 } from './config';
@@ -208,33 +207,49 @@ export async function getInterfaceDetail(
  * @param propName 属性名称，用于生成接口名称
  * @returns TypeScript类型
  */
-export function convertYapiTypeToTsType(typeInfo: string | any, propName?: string): string {
+export function convertYapiTypeToTsType(
+  typeInfo: string | any,
+  propName?: string
+): string {
+  // 定义通用的类型映射
+  const typeMap: Record<string, string> = {
+    string: 'string',
+    number: 'number',
+    integer: 'number',
+    boolean: 'boolean',
+    array: 'any[]',
+    object: 'object',
+    null: 'null',
+    undefined: 'undefined',
+  };
+
   // 如果typeInfo是字符串，直接进行基本类型映射
   if (typeof typeInfo === 'string') {
-    const typeMap: Record<string, string> = {
-      string: 'string',
-      number: 'number',
-      integer: 'number',
-      boolean: 'boolean',
-      array: 'any[]',
-      object: 'object',
-      null: 'null',
-      undefined: 'undefined',
-    };
-
     return typeMap[typeInfo.toLowerCase()] || 'any';
   }
 
   // 如果typeInfo是对象，处理复杂类型
   const type = typeInfo.type || 'object';
   const propKey = propName || 'Unknown';
-  const interfaceName = getInterfaceName(`${propKey}Type`);
+
+  // 处理联合类型 (如: {"type": ["string", "null"]})
+  if (Array.isArray(type)) {
+    const types = type.map((t) => t.toLowerCase()).filter((t) => typeMap[t]);
+    if (types.length > 1) {
+      return types.map((t) => typeMap[t]).join(' | ');
+    } else if (types.length === 1) {
+      return typeMap[types[0]] || 'any';
+    }
+  }
 
   switch (type.toLowerCase()) {
     case 'array':
       if (typeInfo.items) {
         // 处理数组类型，如果有items属性
-        const itemType = convertYapiTypeToTsType(typeInfo.items, `${propKey}Item`);
+        const itemType = convertYapiTypeToTsType(
+          typeInfo.items,
+          `${propKey}Item`
+        );
         return `${itemType}[]`;
       }
       return 'any[]';
@@ -244,10 +259,14 @@ export function convertYapiTypeToTsType(typeInfo: string | any, propName?: strin
         // 处理对象类型，如果有properties属性
         // 生成内联类型定义
         let propertiesDef = '{' + '\n';
-        Object.entries(typeInfo.properties).forEach(([key, prop]: [string, any]) => {
-          const required = typeInfo.required?.includes(key) || false;
-          propertiesDef += `  ${key}${required ? '' : '?'}: ${convertYapiTypeToTsType(prop, key)};\n`;
-        });
+        Object.entries(typeInfo.properties).forEach(
+          ([key, prop]: [string, any]) => {
+            const required = typeInfo.required?.includes(key) || false;
+            propertiesDef += `  ${key}${
+              required ? '' : '?'
+            }: ${convertYapiTypeToTsType(prop, key)};\n`;
+          }
+        );
         propertiesDef += '}';
         return propertiesDef;
       }
@@ -255,14 +274,6 @@ export function convertYapiTypeToTsType(typeInfo: string | any, propName?: strin
 
     default:
       // 对于其他基本类型，使用简单映射
-      const typeMap: Record<string, string> = {
-        string: 'string',
-        number: 'number',
-        integer: 'number',
-        boolean: 'boolean',
-        null: 'null',
-        undefined: 'undefined',
-      };
       return typeMap[type.toLowerCase()] || 'any';
   }
 }
@@ -272,11 +283,8 @@ export function convertYapiTypeToTsType(typeInfo: string | any, propName?: strin
  * @param title 接口标题
  * @returns 接口名称
  */
-export function getInterfaceName(title: string): string {
-  return title
-    .split(' ')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join('');
+export function getInterfaceName(path: string): string {
+  return path.split('/').pop()!;
 }
 
 /**
@@ -293,7 +301,7 @@ export async function generateTypeScriptFiles(
 ): Promise<GenerateResult> {
   try {
     let fileCount = 0;
-    let summaryCode = '// YAPI接口定义汇总文件\n// 包含所有选择的接口定义\n\n';
+    // let summaryCode = '// YAPI接口定义汇总文件\n// 包含所有选择的接口定义\n\n';
 
     // 确保输出目录存在
     if (!fs.existsSync(outputDir)) {
@@ -318,9 +326,7 @@ export async function generateTypeScriptFiles(
       try {
         // 生成接口文件内容
         const fileContent = generateInterfaceFileContent(detailedIface);
-        const interfaceName = getInterfaceName(
-          detailedIface.path.split('/').pop() || ''
-        );
+        const interfaceName = getInterfaceName(detailedIface.path);
         const filename = `${interfaceName}.ts`;
         const filePath = path.join(outputDir, filename);
 
@@ -328,8 +334,8 @@ export async function generateTypeScriptFiles(
         fs.writeFileSync(filePath, fileContent, 'utf-8');
         fileCount++;
 
-        // 添加到汇总文件
-        summaryCode += `import type { ${interfaceName}Request, ${interfaceName}Response, ${interfaceName}Query, ${interfaceName}Body } from './${interfaceName}';\n`;
+        // // 添加到汇总文件
+        // summaryCode += `import type { ${interfaceName}Request, ${interfaceName}Response, ${interfaceName}Query, ${interfaceName}Body } from './${interfaceName}';\n`;
       } catch (error) {
         console.error(`生成接口文件失败(${detailedIface.title}):`, error);
         // 继续处理其他接口，不中断整个过程
@@ -338,8 +344,8 @@ export async function generateTypeScriptFiles(
 
     // 生成汇总文件
     if (fileCount > 0) {
-      const summaryFilePath = path.join(outputDir, 'interfaces.ts');
-      fs.writeFileSync(summaryFilePath, summaryCode, 'utf-8');
+      //   const summaryFilePath = path.join(outputDir, 'interfaces.ts');
+      //   fs.writeFileSync(summaryFilePath, summaryCode, 'utf-8');
     }
 
     return { success: true, fileCount };
@@ -358,20 +364,31 @@ export async function generateTypeScriptFiles(
  * @returns 接口文件内容
  */
 function generateInterfaceFileContent(detailedIface: any): string {
-  let fileCode = `// YAPI接口定义转换的TypeScript类型\n// ${detailedIface.title}\n// 路径: ${detailedIface.path}\n// 方法: ${detailedIface.method}\n\n`;
+  let fileCode = `// YAPI接口定义转换的TypeScript类型
+// ${detailedIface.title}
+// 路径: ${detailedIface.path}
+// 方法: ${detailedIface.method}
+
+`;
+
+  const interfaceName = getInterfaceName(detailedIface.path);
+  let hasParamsInterface = false;
+  let hasQueryInterface = false;
+  let hasBodyInterface = false;
 
   // 生成请求参数接口
   const reqParams = detailedIface.req_params || [];
   if (reqParams.length > 0) {
-    fileCode += `// 请求参数接口
-export interface ${getInterfaceName(
-      detailedIface.path.split('/').pop() || ''
-    )}Request {
+    hasParamsInterface = true;
+    fileCode += `// 路径参数接口
+export interface ${interfaceName}RequestParams {
 `;
     reqParams.forEach((param: any) => {
       fileCode += `  ${param.name}${
         param.required ? '' : '?'
-      }: ${convertYapiTypeToTsType(param.type)}; // ${param.desc || ''}
+      }: ${convertYapiTypeToTsType(param.type)}; ${
+        param.desc ? `// ${param.desc}` : ''
+      }
 `;
     });
     fileCode += '}\n\n';
@@ -380,15 +397,16 @@ export interface ${getInterfaceName(
   // 生成查询参数接口
   const queryParams = detailedIface.req_query || [];
   if (queryParams.length > 0) {
+    hasQueryInterface = true;
     fileCode += `// 查询参数接口
-export interface ${getInterfaceName(
-      detailedIface.path.split('/').pop() || ''
-    )}Request {
+export interface ${interfaceName}RequestQuery {
 `;
     queryParams.forEach((param: any) => {
       fileCode += `  ${param.name}${
         param.required ? '' : '?'
-      }: ${convertYapiTypeToTsType(param.type)}; // ${param.desc || ''}
+      }: ${convertYapiTypeToTsType(param.type)}; ${
+        param.desc ? `// ${param.desc}` : ''
+      }
 `;
     });
     fileCode += '}\n\n';
@@ -399,15 +417,18 @@ export interface ${getInterfaceName(
     try {
       const reqBodyJson = JSON.parse(detailedIface.req_body_other);
       if (reqBodyJson && reqBodyJson.properties) {
-        fileCode += `// 请求体接口\nexport interface ${getInterfaceName(
-          detailedIface.path.split('/').pop() || ''
-        )}Request {\n`;
+        hasBodyInterface = true;
+        fileCode += `// 请求体接口
+export interface ${interfaceName}RequestBody {
+`;
         Object.entries(reqBodyJson.properties).forEach(
           ([key, prop]: [string, any]) => {
             const required = reqBodyJson.required?.includes(key) || false;
             fileCode += `  ${key}${
               required ? '' : '?'
-            }: ${convertYapiTypeToTsType(prop, key)}; // ${prop.description || ''}
+            }: ${convertYapiTypeToTsType(prop, key)};  ${
+              prop.description ? `// ${prop.description}` : ''
+            }
 `;
           }
         );
@@ -418,19 +439,50 @@ export interface ${getInterfaceName(
     }
   }
 
+  // 生成统一的请求接口（如果有多个类型的请求参数）
+  const requestInterfaces: string[] = [];
+  if (hasParamsInterface)
+    requestInterfaces.push(`${interfaceName}RequestParams`);
+  if (hasQueryInterface) requestInterfaces.push(`${interfaceName}RequestQuery`);
+  if (hasBodyInterface) requestInterfaces.push(`${interfaceName}RequestBody`);
+
+  if (requestInterfaces.length > 0) {
+    fileCode += `// 统一请求类型
+export interface ${interfaceName}Request {
+`;
+    if (requestInterfaces.length > 1) {
+      // 如果有多个接口，使用交叉类型
+      fileCode += `  // 组合了以下类型: ${requestInterfaces.join(', ')}
+  // 注意: 实际使用时根据API调用方式选择相应的参数类型
+`;
+    }
+    fileCode += '}\n\n';
+
+    // 添加类型工具函数，帮助组合不同类型的请求参数
+    fileCode += `// 类型工具: 创建完整请求对象
+export type ${interfaceName}FullRequest = ${requestInterfaces.join(
+      ' & '
+    )};\n\n`;
+    fileCode += `// 类型工具: 参数类型选择器
+export type ${interfaceName}Params<T extends 'params' | 'query' | 'body' | 'full'> = T extends 'params' ? ${interfaceName}RequestParams :\n`;
+    fileCode += `  T extends 'query' ? ${interfaceName}RequestQuery :\n`;
+    fileCode += `  T extends 'body' ? ${interfaceName}RequestBody :\n`;
+    fileCode += `  ${interfaceName}FullRequest;\n\n`;
+  }
+
   // 生成返回参数接口
   if (detailedIface.res_body) {
     try {
       const resBodyJson = JSON.parse(detailedIface.res_body);
       if (resBodyJson && resBodyJson.properties) {
-        fileCode += `// 返回参数接口\nexport interface ${getInterfaceName(
-          detailedIface.title
-        )}Response {\n`;
+        fileCode += `// 返回参数接口
+export interface ${interfaceName}Response {
+`;
         Object.entries(resBodyJson.properties).forEach(
           ([key, prop]: [string, any]) => {
-            fileCode += `  ${key}: ${convertYapiTypeToTsType(
-              prop, key
-            )}; // ${prop.description || ''}
+            fileCode += `  ${key}: ${convertYapiTypeToTsType(prop, key)}; // ${
+              prop.description || ''
+            }
 `;
           }
         );
