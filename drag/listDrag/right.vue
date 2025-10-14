@@ -14,7 +14,7 @@
       @drop="handleListDrop($event)"
       @dragleave="handleListDragLeave"
     >
-      <el-scrollbar :height="'100%'" always>
+      <el-scrollbar :height="'100%'">
         <div
           v-for="(item, index) in filteredList"
           :key="item.id"
@@ -91,9 +91,11 @@ interface PropsTypeItem {
 const props = withDefaults(
   defineProps<{
     name?: string;
+    config?: Object;
   }>(),
   {
-    name: 'rightPanel'
+    name: 'rightPanel',
+    config: undefined
   }
 );
 const emit = defineEmits(['remove', 'outhandleDrop']);

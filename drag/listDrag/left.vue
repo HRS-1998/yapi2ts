@@ -1,10 +1,13 @@
 <template>
   <div class="drag">
     <div class="drag-header">
-      <h4>多选拖拽,外部拖入</h4>
-      <h4>{{ filteredList.length }} 项</h4>
+      <template default>
+        <h4 v-if="config?.showTitle !== false">多选拖拽,外部拖入</h4>
+        <h4 v-if="config?.showSummary !== false">{{ filteredList.length }} 项</h4>
+      </template>
+      <slot name="left-panel-header"></slot>
     </div>
-    <div class="search-box">
+    <div class="search-box" v-if="config?.showSearch !== false">
       <dart-input
         v-model="searchQuery"
         placeholder="请搜索"
@@ -20,7 +23,7 @@
       @dragover="handleListDragOver"
       @dragleave="handleListDragLeave"
     >
-      <el-scrollbar :height="'100%'" always>
+      <el-scrollbar :height="'100%'">
         <div
           v-for="field in filteredList"
           :key="field.id"
@@ -36,7 +39,6 @@
             'is-disabled': !isCanChoose(field)
           }"
         >
-          <div class="top-indicator" v-show="showTopIndicator && dragOverItemId === field.id"></div>
           <div class="field-item-content">
             <template v-if="field.slot">
               <div class="field-item-slot">
@@ -44,31 +46,36 @@
               </div>
             </template>
             <template v-else>
-              <el-tooltip
-                :content="field.title"
-                :placement="tooltipPlacement"
-                :effect="'dark'"
-                :popover-width="'auto'"
-                v-if="showTooltip"
-              >
+              <template v-if="showTooltip">
+                <el-tooltip
+                  :content="field.title"
+                  :placement="tooltipPlacement"
+                  :effect="'dark'"
+                  :popover-width="'auto'"
+                >
+                  <div
+                    class="field-item-text"
+                    @mouseenter="showTooltipHandle"
+                    @mouseleave="showTooltip = false"
+                  >
+                    <template default>{{ field.title }}</template>
+                    <slot name="left-panel-item"></slot>
+                  </div> </el-tooltip
+              ></template>
+              <template v-else>
                 <div
                   class="field-item-text"
                   @mouseenter="showTooltipHandle"
                   @mouseleave="showTooltip = false"
                 >
-                  {{ field.title }}
+                  <template default>{{ field.title }}</template>
+                  <slot name="left-panel-item" :field="field"></slot>
                 </div>
-              </el-tooltip>
-              <div
-                v-else
-                class="field-item-text"
-                @mouseenter="showTooltipHandle"
-                @mouseleave="showTooltip = false"
-              >
-                {{ field.title }}
-              </div>
+              </template>
             </template>
           </div>
+
+          <div class="top-indicator" v-show="showTopIndicator && dragOverItemId === field.id"></div>
           <div
             class="bottom-indicator"
             v-show="showBottomIndicator && dragOverItemId === field.id"
@@ -90,7 +97,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, isReactive, ref, toRaw, watch, h } from 'vue';
+import { isReactive, ref, toRaw, watch, h } from 'vue';
 import { cloneDeep, debounce } from 'lodash-es';
 import type { Placement } from 'element-plus';
 
@@ -109,23 +116,25 @@ const props = withDefaults(
   defineProps<{
     list: PropsType[];
     name?: string; // 标记当前列表名
-    width?: number;
+    config?: {
+      showTitle?: boolean; //显示title
+      showSummary?: boolean; //显示统计
+      showSearch?: boolean; //显示搜索
+    };
   }>(),
   {
     list: () => [],
     name: 'leftPanel',
-    width: 300
+    config: undefined
   }
 );
+console.log(props, 'leftProps');
 const emit = defineEmits(['outhandleDrop']); // 外部拖入
 const currentSelectedList = ref<FieldType[]>([]);
 const dragOverItemId = ref<string | number | null>(null);
 const showTopIndicator = ref(false);
 const showBottomIndicator = ref(false);
 
-const dragWidth = computed(() => {
-  return props.width + 'px';
-});
 const showTooltip = ref<boolean>(false);
 const tooltipPlacement = ref<Placement>('top'); // 设置tooltip的显示位置
 const dragBgRef = ref<HTMLElement>();
@@ -429,7 +438,7 @@ watch(
 <style scoped lang="scss">
 .drag {
   height: 100%;
-  width: v-bind(dragWidth);
+  width: 300px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;

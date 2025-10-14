@@ -1,17 +1,26 @@
 <template>
-  <div class="cross-table-container">
+  <div class="cross-table-container" :class="config?.cls">
     <!-- 左侧多选拖拽区域 -->
     <div class="left-panel">
       <left-panel
         :list="mappedLeftList"
+        :config="config?.leftPanel"
         name="leftPanel"
         @outhandleDrop="handleLeftDrop"
-      ></left-panel>
+      >
+        <template #left-panel-header>
+          <slot name="left-panel-header"></slot>
+        </template>
+        <template #left-panel-item="{ field }">
+          <slot name="left-panel-item" :item="field"></slot>
+        </template>
+      </left-panel>
     </div>
     <!-- 右侧拖选排序侧区域 -->
     <div class="right-panel">
       <right-panel
         v-model="mappedRightList"
+        :config="config?.rightPanel"
         name="rightPanel"
         @remove="remove"
         @outhandleDrop="handleDrop"
@@ -28,24 +37,41 @@ import rightPanel from './right.vue';
 // props用于替换 重定义字段名称
 const props = defineProps<{
   config?: {
-    labelKey?: string;
-    valueKey?: string;
-    canChooseKey?: string;
+    prop?: {
+      labelKey?: string;
+      valueKey?: string;
+      canChooseKey?: string;
+    };
+    cls?: string;
+    leftPanel?: {
+      showTitle?: boolean;
+      showSummary?: boolean;
+      showSearch?: boolean;
+    };
+    rightPanel?: {
+      showTitle?: boolean;
+      showSummary?: boolean;
+      showSearch?: boolean;
+    };
   };
 }>();
 
 // 获取配置的字段映射，提供默认值
-const { labelKey = 'title', valueKey = 'id', canChooseKey = 'canChoose' } = props.config || {};
+const {
+  labelKey = 'title',
+  valueKey = 'id',
+  canChooseKey = 'canChoose'
+} = props.config?.prop || {};
 
 // 原始的列表数据
 type RawItem = Record<string, any>;
 
 // 定义leftList的类型，默认为DragItem[]，但可以根据config灵活处理
-const rawLeftList = defineModel<RawItem[]>('leftList', {
+const rawLeftList = defineModel<RawItem[]>('leftPanel', {
   default: () => []
 });
 
-const rawRightList = defineModel<RawItem[]>('rightList', {
+const rawRightList = defineModel<RawItem[]>('rightPanel', {
   default: () => []
 });
 
@@ -94,26 +120,6 @@ const mappedRightList = computed<DragItem[]>({
     });
   }
 });
-
-// // 数据定义
-// const leftList = ref<DragItem[]>([
-//   { id: 1, title: 'aaaaaaaa', canChoose: false },
-//   { id: 2, title: 'bbbbbbbb', canChoose: true },
-//   { id: 3, title: 'cccccccc', canChoose: true },
-//   { id: 4, title: 'dddddddd', canChoose: true },
-//   { id: 5, title: 'eeeeeeee', canChoose: true },
-//   { id: 7, title: 'ffffffff', canChoose: true },
-//   { id: 8, title: 'gggggggg', canChoose: true },
-//   { id: 9, title: 'hhhhhhhh', canChoose: true },
-//   { id: 10, title: 'iiiiiiii', canChoose: true },
-//   { id: 11, title: 'jjjjjjjj', canChoose: true },
-//   { id: 12, title: 'kkkkkkkk', canChoose: true },
-//   { id: 13, title: 'llllllll', canChoose: true },
-//   { id: 14, title: 'mmmmmmmm', canChoose: true },
-//   { id: 15, title: '超长文字tooltip测试超长文字tooltip测试超长文字tooltip测试', canChoose: true }
-// ]);
-
-// const rightList = ref<DragItem[]>([]);
 
 const getDiffList = (leftList: DragItem[], rightList: DragItem[]) => {
   const rightIds = new Set(rightList.map((item) => item.id));
@@ -217,16 +223,19 @@ const remove = (field: DragItem) => {
 <style scoped lang="scss">
 .cross-table-container {
   display: flex;
-  height: 100vh;
+  justify-content: center;
+  align-items: center;
+  height: 600px;
   border: 1px solid #ddd;
   .left-panel {
     padding: 16px;
-    border-right: 1px solid #ddd;
+    border: 1px solid #ddd;
     overflow-y: auto;
   }
   .right-panel {
     padding: 16px;
     width: 300px;
+    border: 1px solid #ddd;
     overflow-y: auto;
   }
 }
