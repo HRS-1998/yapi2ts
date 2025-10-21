@@ -8,11 +8,11 @@
         name="leftPanel"
         @outhandleDrop="handleLeftDrop"
       >
-        <template #left-panel-header>
+        <template #panel-header>
           <slot name="left-panel-header"></slot>
         </template>
-        <template #left-panel-item="{ field }">
-          <slot name="left-panel-item" :item="field"></slot>
+        <template #custom-item="{ field }">
+          <slot name="custom-item" :item="getRawData(field)"></slot>
         </template>
       </left-panel>
     </div>
@@ -23,18 +23,25 @@
         :config="config?.rightPanel"
         name="rightPanel"
         @remove="remove"
-        @outhandleDrop="handleDrop"
-      ></right-panel>
+        @outhandleDrop="handleRightDrop"
+      >
+        <template #panel-header>
+          <slot name="right-panel-header"></slot>
+        </template>
+        <template #custom-item="{ field }">
+          <slot name="custom-item" :item="getRawData(field)"></slot>
+        </template>
+      </right-panel>
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { computed } from 'vue';
+import type { PanelConfig } from './types/index';
 import leftPanel from './left.vue';
 import rightPanel from './right.vue';
 
-// props用于替换 重定义字段名称
 const props = defineProps<{
   config?: {
     prop?: {
@@ -43,16 +50,8 @@ const props = defineProps<{
       canChooseKey?: string;
     };
     cls?: string;
-    leftPanel?: {
-      showTitle?: boolean;
-      showSummary?: boolean;
-      showSearch?: boolean;
-    };
-    rightPanel?: {
-      showTitle?: boolean;
-      showSummary?: boolean;
-      showSearch?: boolean;
-    };
+    leftPanel?: PanelConfig;
+    rightPanel?: PanelConfig;
   };
 }>();
 
@@ -127,7 +126,7 @@ const getDiffList = (leftList: DragItem[], rightList: DragItem[]) => {
 };
 
 // 放置左侧拖动过来的元素到右侧指定index位置
-const handleDrop = (object?: { list: DragItem[]; index: number }) => {
+const handleRightDrop = (object?: { list: DragItem[]; index: number }) => {
   if (object) {
     // 过滤出不在右侧列中的元素，插入右侧列
     const result = getDiffList(object.list, mappedRightList.value);
@@ -217,6 +216,17 @@ const remove = (field: DragItem) => {
       rawLeftList.value = newLeftList;
     }
   }
+};
+
+// 还原原始数据格式
+// 还原传入的数据格式
+const getRawData = (field: DragItem): RawItem => {
+  return {
+    [valueKey]: field.id,
+    [labelKey]: field.title,
+    [canChooseKey]: field.canChoose !== undefined ? field.canChoose : true,
+    slot: field.slot || undefined
+  };
 };
 </script>
 

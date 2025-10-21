@@ -3,24 +3,17 @@
     <template #left-panel-header>
       <h4>自定义header</h4>
     </template>
-    <template #left-panel-item="{ item }">
-      <div v-if="item.id == 3">
-        <img src="https://admin.ct108.net:777/images/dingbtn.png" alt="dsg" />
+    <template #custom-item="{ item }">
+      <div v-if="item.idreset === 3">
+        <img src="https://admin.ct108.net:777/images/dingbtn.png" />
       </div>
-      <div v-else>{{ item.title }}-{{ item.id }}</div>
+      <div v-if="item.idreset === 4">{{ item.titlereset }}-{{ item.idreset }}</div>
     </template>
   </list-drag>
 </template>
 <script lang="ts" setup>
 import { ref, h } from 'vue';
 import ListDrag from '../listDrag/index.vue';
-
-// interface DragItem {
-//   id: string | number; // 字段id
-//   title: string; // 字段名称
-//   canChoose: boolean; // 是否可拖拽
-//   slot?: any; //自定义的title
-// }
 interface ConfigType {
   //字段别名
   prop?: {
@@ -33,13 +26,19 @@ interface ConfigType {
 
   //leftPanel 设置左侧列表相关
   leftPanel?: {
+    name?: string;
+    dragOrigin?: string;
     showTitle?: boolean;
+    title?: string;
     showSummary?: boolean;
     showSearch?: boolean;
   };
   //rightPanel 设置右侧列表相关
   rightPanel?: {
+    name?: string;
+    dragOrigin?: string;
     showTitle?: boolean;
+    title?: string;
     showSummary?: boolean;
     showSearch?: boolean;
   };
@@ -47,7 +46,7 @@ interface ConfigType {
 // 配置项 用于重定义列表字段
 const config = ref<ConfigType>({
   cls: 'drag-list-container',
-  prop: { valueKey: 'idsm', labelKey: 'label', canChooseKey: 'canChoose' },
+  prop: { valueKey: 'idreset', labelKey: 'titlereset', canChooseKey: 'choosereset' },
   leftPanel: {
     showTitle: true,
     showSummary: true,
@@ -56,7 +55,13 @@ const config = ref<ConfigType>({
   rightPanel: {}
 });
 
-// 数据定义
+// 默认数据定义
+// interface DragItem {
+//   id: string | number; // 字段id
+//   title: string; // 字段名称
+//   canChoose: boolean; // 是否可拖拽
+//   slot?: any; //自定义的title
+// }
 // const leftList = ref<DragItem[]>([
 //   { id: 1, title: 'aaaaaaaa', canChoose: false },
 //   { id: 2, title: 'bbbbbbbb', canChoose: true },
@@ -76,29 +81,31 @@ const config = ref<ConfigType>({
 // leftList的默认类型为DragItem[]，实际类型是config配置的字段映射值
 const leftList = ref<any[]>([
   {
-    idsm: 1,
-    label: 'aaaaaaaa',
-    canChoose: true,
-    slot: () => h('span', { style: { color: '#409EFF' } }, '蓝色文字')
+    idreset: 1,
+    titlereset: 'aaaaaaaa',
+    choosereset: true
   },
   {
-    idsm: 2,
-    label: 'bbbbbbbb',
-    canChoose: true,
-    slot: () => h('img', { src: 'https://admin.ct108.net:777/images/dingbtn.png', alt: '图片' })
+    idreset: 2,
+    titlereset: 'bbbbbbbb',
+    choosereset: true
   },
-  { idsm: 3, label: 'cccccccc', canChoose: true },
-  { idsm: 4, label: 'dddddddd', canChoose: true },
-  { idsm: 5, label: 'eeeeeeee', canChoose: true },
-  { idsm: 7, label: 'ffffffff', canChoose: true },
-  { idsm: 8, label: 'gggggggg', canChoose: true },
-  { idsm: 9, label: 'hhhhhhhh', canChoose: true },
-  { idsm: 10, label: 'iiiiiiii', canChoose: true },
-  { idsm: 11, label: 'jjjjjjjj', canChoose: true },
-  { idsm: 12, label: 'kkkkkkkk', canChoose: true },
-  { idsm: 13, label: 'llllllll', canChoose: true },
-  { idsm: 14, label: 'mmmmmmmm', canChoose: true },
-  { idsm: 15, label: '超长文字tooltip测试超长文字tooltip测试超长文字tooltip测试', canChoose: true }
+  { idreset: 3, titlereset: 'cccccccc', choosereset: true },
+  { idreset: 4, titlereset: 'dddddddd', choosereset: true },
+  { idreset: 5, titlereset: 'eeeeeeee', choosereset: true },
+  { idreset: 7, titlereset: 'ffffffff', choosereset: true },
+  { idreset: 8, titlereset: 'gggggggg', choosereset: true },
+  { idreset: 9, titlereset: 'hhhhhhhh', choosereset: true },
+  { idreset: 10, titlereset: 'iiiiiiii', choosereset: true },
+  { idreset: 11, titlereset: 'jjjjjjjj', choosereset: true },
+  { idreset: 12, titlereset: 'kkkkkkkk', choosereset: true },
+  { idreset: 13, titlereset: 'llllllll', choosereset: true },
+  { idreset: 14, titlereset: 'mmmmmmmm', choosereset: true },
+  {
+    idreset: 15,
+    titlereset: '超长文字tooltip测试超长文字tooltip测试超长文字tooltip测试',
+    choosereset: true
+  }
 ]);
 
 const rightList = ref<any[]>([]);

@@ -1,13 +1,14 @@
 <template>
   <div class="drag">
-    <div class="drag-header">
-      <h4>内部拖拽排序，外部拖拽插入</h4>
-      <h4>{{ filteredList.length }} 项</h4>
-    </div>
+    <drag-header :list="filteredList" :config="mergedConfig">
+      <template #panel-header>
+        <slot name="panel-header"></slot>
+      </template>
+    </drag-header>
+
     <div class="search-box">
       <dart-input v-model="searchKeyword" placeholder="请搜索" clearable />
     </div>
-
     <div
       class="drag-list"
       @dragover="handleListDragOver"
@@ -34,37 +35,11 @@
             >
               ≡
             </div>
-            <template v-if="item.slot">
-              <div class="drag-item-slot">
-                <component :is="renderVNode(item.slot)"></component>
-              </div>
-            </template>
-            <template v-else>
-              <el-tooltip
-                :content="item.title"
-                :placement="tooltipPlacement"
-                :effect="'dark'"
-                :popover-width="'auto'"
-                v-if="showTooltip"
-              >
-                <div
-                  class="drag-item-text"
-                  @mouseenter="showTooltipHandle"
-                  @mouseleave="showTooltip = false"
-                >
-                  {{ item.title }}
-                </div>
-              </el-tooltip>
-              <div
-                v-else
-                class="drag-item-text"
-                @mouseenter="showTooltipHandle"
-                @mouseleave="showTooltip = false"
-              >
-                {{ item.title }}
-              </div>
-            </template>
-
+            <list-content :field="item" :placement="tooltipPlacement">
+              <template #custom-item="{ field }">
+                <slot name="custom-item" :field="field">{{ field.title }}</slot>
+              </template>
+            </list-content>
             <div class="remove-btn" @click.stop="remove(item)">×</div>
           </div>
 
@@ -78,35 +53,41 @@
   </div>
 </template>
 <script lang="ts" setup>
-import { ref, computed, toRaw, isReactive, h } from 'vue';
-import { cloneDeep } from 'lodash-es';
+import { ref, computed } from 'vue';
 import type { Placement } from 'element-plus';
-interface PropsTypeItem {
-  id: string | number;
-  title: string;
-  canChoose?: boolean;
-  slot?: any; //自定义的title
-}
+import type { ListItem, PanelConfig } from './types/index';
+import { bigObjDeepClone } from './utils/index';
+import { useMergeConfig } from './hooks/useMergeConfig';
+import DragHeader from './components/header.vue';
+import ListContent from './components/listcontent.vue';
 
-const props = withDefaults(
-  defineProps<{
-    name?: string;
-    config?: Object;
-  }>(),
-  {
-    name: 'rightPanel',
-    config: undefined
-  }
-);
+const props = defineProps<{
+  name?: string;
+  config?: PanelConfig;
+}>();
+
+const defaultConfig: PanelConfig = {
+  name: 'rightPanel',
+  dragOrigin: 'leftPanel',
+  labelKey: 'title',
+  valueKey: 'id',
+  canchooseKey: 'canChoose',
+  showTitle: true,
+  title: '右侧列表-内部拖拽,外部拖入',
+  showSummary: true,
+  showSearch: true
+};
+
+const { mergedConfig } = useMergeConfig(props.config, defaultConfig);
+
 const emit = defineEmits(['remove', 'outhandleDrop']);
-const list = defineModel<PropsTypeItem[]>({
+const list = defineModel<Required<ListItem>[]>({
   default: () => []
 });
-const showTooltip = ref<boolean>(false);
 const tooltipPlacement = ref<Placement>('top'); // 设置tooltip的显示位置
 const searchKeyword = ref<string>('');
 // 拖拽排序相关状态
-const dragItem = ref<{ item: PropsTypeItem; index: number } | null>(null);
+const dragItem = ref<{ item: ListItem; index: number } | null>(null);
 const dragOverIndex = ref<number | null>(null);
 const dragTargetIndex = ref<number | null>(null);
 const showTopIndicator = ref(false);
@@ -122,12 +103,12 @@ const filteredList = computed(() => {
 });
 
 // 判断是否可拖拽
-const isItemDraggable = (item: PropsTypeItem): boolean => {
+const isItemDraggable = (item: ListItem): boolean => {
   return item.canChoose !== undefined ? item.canChoose : true;
 };
 
 // 行维度拖拽开始
-const handleDragStart = (item: PropsTypeItem, index: number, event: DragEvent) => {
+const handleDragStart = (item: ListItem, index: number, event: DragEvent) => {
   if (!isItemDraggable(item)) {
     event.preventDefault();
     return;
@@ -164,7 +145,6 @@ const handleDragOver = (index: number, event: DragEvent) => {
     showTopIndicator.value = false;
     showBottomIndicator.value = true;
   }
-  //   }
 };
 
 // 行维度项拖拽进入
@@ -236,52 +216,10 @@ const handleListDragLeave = () => {
   showBottomIndicator.value = false;
 };
 
-const showTooltipHandle = (e: MouseEvent) => {
-  const target = e.target as HTMLElement;
-  if (target && target.scrollWidth > target.clientWidth) {
-    showTooltip.value = true;
-  }
-};
-
-// 数据克隆
-const bigObjDeepClone = (data: any) => {
-  if (!data) return data;
-  if (!structuredClone) {
-    return cloneDeep(data);
-  }
-  try {
-    const rawData = isReactive(data) ? toRaw(data) : data;
-    return structuredClone(rawData);
-  } catch (error) {
-    return cloneDeep(data);
-  }
-};
-
 // 移除维度
-const remove = (field: PropsTypeItem) => {
+const remove = (field: ListItem) => {
   list.value = list.value.filter((item) => item.id !== field.id);
   emit('remove', field);
-};
-// 渲染VNode
-const renderVNode = (slotContent: any) => {
-  if (!slotContent) return null;
-
-  // 如果是函数，调用它获取VNode
-  if (typeof slotContent === 'function') {
-    return slotContent();
-  }
-
-  // 如果已经是VNode，直接返回
-  if (typeof slotContent === 'object' && slotContent.type !== undefined) {
-    return { render: () => slotContent };
-  }
-
-  // 如果是字符串，创建文本节点
-  if (typeof slotContent === 'string') {
-    return { render: () => h('span', {}, slotContent) };
-  }
-
-  return null;
 };
 </script>
 <style lang="scss" scoped>
@@ -360,7 +298,7 @@ const renderVNode = (slotContent: any) => {
 
       .top-indicator {
         position: absolute;
-        top: -6px;
+        top: -7px;
         left: 0;
         width: 100%;
         height: 2px;
@@ -368,25 +306,12 @@ const renderVNode = (slotContent: any) => {
       }
       .bottom-indicator {
         position: absolute;
-        bottom: -6px;
+        bottom: -7px;
         left: 0;
         width: 100%;
         height: 2px;
         background: skyblue;
       }
-    }
-  }
-  .drag-area {
-    border: 2px dashed #ccc;
-    border-radius: 4px;
-    padding: 16px;
-    text-align: center;
-    margin: 8px 0;
-    min-height: 60px;
-    cursor: grab;
-    .placeholder {
-      color: #999;
-      font-size: 14px;
     }
   }
 }
