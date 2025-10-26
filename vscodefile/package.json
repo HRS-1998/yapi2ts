@@ -46,22 +46,30 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run build",
+    "vscode:prepublish": "npm run build:all",
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
-    "build": "webpack",
+    "build": "vite build",
+    "build:webview": "vite build --config vite.config.webview.ts",
+    "build:all": "npm run build && npm run build:webview",
+    "build:extension:watch": "vite build --watch",
+    "build:webview:watch": "vite build --config vite.config.webview.ts --watch",
+    "dev:webview": "vite dev --config vite.config.webview.ts",
     "package": "vsce package"
   },
   "devDependencies": {
     "@types/vscode": "^1.70.0",
     "@types/node": "^18.0.0",
     "@types/mocha": "^10.0.0",
-    "ts-loader": "^9.3.0",
-    "typescript": "^5.0.0",
-    "webpack": "^5.70.0",
-    "webpack-cli": "^4.9.0"
+    "typescript": "^5.2.2",
+    "vite": "^5.1.6",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "vite-plugin-esmodule": "^1.4.4"
   },
   "dependencies": {
-    "node-fetch": "^3.2.0"
+    "node-fetch": "^3.2.0",
+    "@vue/compiler-sfc": "^3.4.21",
+    "element-plus": "^2.5.1",
+    "vue": "^3.4.21"
   }
 }

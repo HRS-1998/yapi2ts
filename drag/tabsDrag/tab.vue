@@ -1,22 +1,26 @@
 <template>
-  <div class="tabs-container">
+  <div class="tags-container">
     <el-scrollbar :height="'100%'" always>
-      <div class="tab-list" @drag="handleDrag" @dragend="handleDragEnd">
-        <div class="tab-item" v-for="element in tabs" :key="element.id">
+      <div class="tag-list" @drag="handleDrag" @dragend="handleDragEnd">
+        <div class="tag-item" v-for="element in tags" :key="element.id">
           <span
             class="active-line-front"
             v-show="element.id === currentTabId && frontLineShow"
           ></span>
-          <div
-            class="tab-item-content"
-            :class="{ selected: isSelected(element) }"
+
+          <el-tag
+            type="primary"
+            effect="plain"
+            class="tag-item-content"
             draggable="true"
+            :class="{ selected: isSelected(element) }"
             @dragstart="handleDragStart(element, $event)"
             @click="toggleSelection(element, $event)"
             @dragover="handleDragOver(element, $event)"
           >
-            {{ element.name }}
-          </div>
+            <slot name="custom-item" :item="element"> {{ element.name }} </slot>
+          </el-tag>
+
           <span
             class="active-line-back"
             v-show="element.id === currentTabId && backLineShow"
@@ -26,84 +30,98 @@
     </el-scrollbar>
   </div>
 
-  <!-- 多选拖拽背景 dragbg-->
-  <div class="drag-bg" v-show="dragBgShow" ref="dragBgRef">
-    <div v-for="(item, index) in selectedTabsForDrag" :key="index" class="drag-bg-item">
-      {{ item.name }}
-    </div>
-  </div>
+  <drag-bg ref="dragBgRef" v-model="dragBgShow" :list="selectedTabsForDrag">
+    <template #custom-item="{ item }">
+      <slot name="custom-item" :item="item"></slot>
+    </template>
+  </drag-bg>
 </template>
 
 <script lang="ts" setup>
 import { ref, computed } from 'vue';
 import { cloneDeep } from 'lodash-es';
+import { useDragPreview } from './hooks/useDragPreview';
+import DragBg from './components/dragbg.vue';
 
 interface TabType {
   id: number | string;
   name: string;
 }
+interface RawTabType {
+  [key: string]: any;
+}
 
-const tabs = defineModel<TabType[]>({
+const props = defineProps<{
+  prop?: {
+    labelKey: string;
+    valueKey: string;
+  };
+}>();
+
+// 原始数据
+const rawTabs = defineModel<RawTabType[]>({
   default: () => []
 });
 
-const dragBgRef = ref<HTMLElement | null>(null);
+const { valueKey = 'id', labelKey = 'name' } = props.prop || {};
+// 映射
+const tags = computed<TabType[]>({
+  get() {
+    return rawTabs.value.map((item) => ({
+      id: item[valueKey],
+      name: item[labelKey]
+    }));
+  },
+  set(newValue) {
+    // 当内部tabs变化时，同步回原始数据
+    rawTabs.value = newValue.map((item) => {
+      const rawItem: RawTabType = {};
+      rawItem[labelKey] = item.name;
+      rawItem[valueKey] = item.id;
+      return rawItem;
+    });
+  }
+});
+
+const dragBgRef = ref<InstanceType<typeof DragBg> | null>(null);
 const selectedTabIds = ref<(number | string)[]>([]);
 const targetIndex = ref<number>();
 const currentTabId = ref<number | string>();
 const frontLineShow = ref<boolean>(false); // 当前鼠标移入元素前边线显示
 const backLineShow = ref<boolean>(false); // 当前鼠标移入元素前边线显示
 const dragBgShow = ref<boolean>(false); // 是否显示拖拽背景
-const dragPreview = ref<HTMLDivElement | null>(null); // 拖拽默认背景元素
+// const dragPreview = ref<HTMLDivElement | null>(null); // 拖拽默认背景元素
+const { dragPreview, createDragPreview, removeDragPreview } = useDragPreview();
 
 // 计算选中的 tabs（用于拖拽背景显示）
 const selectedTabsForDrag = computed(() => {
-  return tabs.value.filter((tab) => selectedTabIds.value.includes(tab.id));
+  return tags.value.filter((tag) => selectedTabIds.value.includes(tag.id));
 });
 
-const isSelected = (tab: TabType): boolean => {
-  return selectedTabIds.value.includes(tab.id);
+const isSelected = (tag: TabType): boolean => {
+  return selectedTabIds.value.includes(tag.id);
 };
 
 const findTabIndex = (tabList: TabType[], id: number | string) => {
   return tabList.findIndex((item) => item.id === id);
 };
 
-const toggleSelection = (tab: TabType, event: MouseEvent) => {
+const toggleSelection = (tag: TabType, event: MouseEvent) => {
   const isCtrlPressed = event.ctrlKey || event.metaKey;
   if (isCtrlPressed) {
-    const index = selectedTabIds.value.indexOf(tab.id);
-    index === -1 ? selectedTabIds.value.push(tab.id) : selectedTabIds.value.splice(index, 1);
+    const index = selectedTabIds.value.indexOf(tag.id);
+    index === -1 ? selectedTabIds.value.push(tag.id) : selectedTabIds.value.splice(index, 1);
     return;
   }
   //取消选中
-  if (selectedTabIds.value.length === 1 && selectedTabIds.value[0] === tab.id) {
+  if (selectedTabIds.value.length === 1 && selectedTabIds.value[0] === tag.id) {
     selectedTabIds.value = [];
     return;
   }
-  selectedTabIds.value = [tab.id];
+  selectedTabIds.value = [tag.id];
 };
 
-const createDragPreview = () => {
-  dragPreview.value = document.createElement('div');
-  const style = {
-    width: '1px',
-    height: '1px',
-    opacity: '0',
-    position: 'absolute',
-    top: '-1000px'
-  };
-  Object.assign(dragPreview.value.style, style);
-  document.body.appendChild(dragPreview.value);
-};
-const removeDragPreview = () => {
-  if (dragPreview.value) {
-    document.body.removeChild(dragPreview.value);
-    dragPreview.value = null;
-  }
-};
-
-const handleDragStart = (tab: TabType, event: DragEvent) => {
+const handleDragStart = (tag: TabType, event: DragEvent) => {
   const dataTransfer = event.dataTransfer;
   if (!dataTransfer) return;
   createDragPreview();
@@ -111,44 +129,25 @@ const handleDragStart = (tab: TabType, event: DragEvent) => {
     dataTransfer.setDragImage(dragPreview.value, 0, 0);
   }
   // 如果当前拖拽的项未被选中，清空选择并只选择当前项
-  if (!selectedTabIds.value.includes(tab.id)) {
-    selectedTabIds.value = [tab.id];
+  if (!selectedTabIds.value.includes(tag.id)) {
+    selectedTabIds.value = [tag.id];
   }
-  //   dragBgShow.value = true;
   dataTransfer.effectAllowed = 'move';
 };
 
-const animationFrameId = ref<number>(0);
-
-const cancelAFrame = () => {
-  if (animationFrameId.value) {
-    cancelAnimationFrame(animationFrameId.value);
-    animationFrameId.value = 0;
-  }
-};
 //更新拖拽背景位置
 const handleDrag = (event: DragEvent) => {
-  const clientX = event.clientX;
-  const clientY = event.clientY;
-  cancelAFrame();
-  animationFrameId.value = requestAnimationFrame(() => {
-    if (!dragBgRef.value) return;
-    // 只在坐标值有效时更新位置
-    if (clientX !== 0 && clientY !== 0) {
-      dragBgRef.value.style.left = `${clientX - 10}px`;
-      dragBgRef.value.style.top = `${clientY - 10}px`;
-      if (!dragBgShow.value) dragBgShow.value = true;
-    }
-  });
+  if (dragBgRef.value) dragBgRef.value.updatePosition(event);
+  if (!dragBgShow.value) dragBgShow.value = true;
 };
 
 // 拖拽经过更新显示分隔线
-const handleDragOver = (tab: TabType, event: DragEvent) => {
+const handleDragOver = (tag: TabType, event: DragEvent) => {
   event.preventDefault();
   const target = (event.currentTarget || event.target) as HTMLElement;
   if (!target) return;
-  currentTabId.value = tab.id;
-  const index = findTabIndex(tabs.value, tab.id);
+  currentTabId.value = tag.id;
+  const index = findTabIndex(tags.value, tag.id);
   const rect = target.getBoundingClientRect();
   const width = rect.width;
   const centerX = width / 2 + rect.left;
@@ -182,7 +181,7 @@ const multiDrag = (data: TabType[]) => {
     const tabIndex = data.findIndex((item: any) => item.id === selectedTabs[i].id && !item.isNew);
     data.splice(tabIndex, 1);
   }
-  tabs.value = data.map((item) => {
+  tags.value = data.map((item) => {
     return {
       id: item.id,
       name: item.name
@@ -194,7 +193,7 @@ const multiDrag = (data: TabType[]) => {
 const handleDragEnd = () => {
   dragBgShow.value = false;
   removeDragPreview();
-  const data = cloneDeep(tabs.value);
+  const data = cloneDeep(tags.value);
   multiDrag(data);
 };
 
@@ -205,63 +204,69 @@ const initDragParams = () => {
   frontLineShow.value = false;
   backLineShow.value = false;
   selectedTabIds.value = [];
+  if (dragPreview.value) {
+    dragBgRef.value?.cancelAFrame();
+  }
 };
 initDragParams();
 </script>
 
 <style lang="scss" scoped>
-.tabs-container {
-  border: 1px solid #ddd;
+.tags-container {
+  border: 1px solid #dcdfe6;
   border-radius: 4px;
-  background: #f9f9f9;
-  height: 300px;
+  background: #fff;
+  min-height: 100px;
   overflow: hidden;
   position: relative;
-  .tab-list {
+  --tag-hover-bg: #409eff;
+  --tag-selected-bg: #409eff;
+  .tag-list {
     display: flex;
     flex-wrap: wrap;
-    padding: 30px 8px;
+    padding: 15px;
     row-gap: 12px;
+    column-gap: 8px;
     box-sizing: border-box;
-    .tab-item {
+    cursor: grab;
+    .tag-item {
       position: relative;
       height: 32px;
-      .tab-item-content {
+      .tag-item-content {
         display: inline-flex;
         align-items: center;
-        padding: 4px 8px;
-        margin: 0 4px;
-        background: #e6f7ff;
-        border: 1px solid #b3d8ff;
-        border-radius: 4px;
+        height: 100%;
+        width: 100%;
         cursor: grab;
-        transition: all 0.2s;
-
-        &:hover {
-          background: #d0eaff;
-        }
+        transition: all 0.2;
+        // &:hover {
+        //   background: var(--tag-hover-bg);
+        //   color: #fff;
+        //   border: 1px solid #fff;
+        // }
 
         &.selected {
-          background: #a0d9ff;
-          border-color: #66b1ff;
+          background: var(--tag-selected-bg);
+          color: #fff;
+          border: 1px solid #fff;
         }
       }
 
       .active-line-back {
         position: absolute;
-        right: -1px;
+        right: -5px;
         top: 50%;
         transform: translateY(-50%);
-        height: 50%;
+        height: 80%;
         width: 2px;
         background-color: #409eff;
       }
       .active-line-front {
         position: absolute;
-        left: -1px;
+        left: -5px;
         top: 50%;
         transform: translateY(-50%);
-        height: 50%;
+        height: 80%;
         width: 2px;
         background-color: #409eff;
       }

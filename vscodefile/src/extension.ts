@@ -337,8 +337,18 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // Webview视图提供者类
-  class YapiViewProvider implements vscode.WebviewViewProvider {
+  // 生成随机字符串用于CSP nonce
+function getNonce() {
+  let text = '';
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}
+
+// Webview视图提供者类
+class YapiViewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
 
     constructor(
@@ -517,51 +527,98 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 获取Webview HTML内容
     private _getHtmlContent(webview: vscode.Webview) {
-      // 读取HTML文件内容
-      const fs = require('fs');
-      const path = require('path');
-
-      // 构建HTML文件的绝对路径
-      const htmlPath = path.join(
+      // 使用导入的fs和path模块
+      
+      // 尝试加载构建后的文件
+      let htmlPath = path.join(
         this._extensionUri.fsPath,
-        'src',
+        'dist',
         'webview',
         'index.html'
       );
 
-      // 构建CSS文件的绝对路径
-      const cssPath = path.join(
-        this._extensionUri.fsPath,
-        'src',
-        'webview',
-        'index.css'
-      );
+      // 如果构建后的文件不存在，使用源码目录下的文件（开发环境）
+      if (!fs.existsSync(htmlPath)) {
+        htmlPath = path.join(
+          this._extensionUri.fsPath,
+          'src',
+          'webview',
+          'index.html'
+        );
+      }
 
-      // 构建JS文件的绝对路径
-      const jsPath = path.join(
-        this._extensionUri.fsPath,
-        'src',
-        'webview',
-        'index.js'
-      );
-
-      // 创建webview可用的URI
-      const cssUri = webview.asWebviewUri(vscode.Uri.file(cssPath));
-      const jsUri = webview.asWebviewUri(vscode.Uri.file(jsPath));
-
-      // 读取HTML文件内容
       try {
+        // 读取HTML文件内容
         let htmlContent = fs.readFileSync(htmlPath, 'utf8');
 
-        // 将HTML内容中的资源路径替换为vscode的webview可用的URI
+        // 添加CSP安全策略
+        const nonce = getNonce();
+        const csp = `
+          <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; script-src 'nonce-${nonce}'; style-src ${webview.cspSource} 'unsafe-inline';">
+        `;
+
+        // 替换HTML内容
         htmlContent = htmlContent.replace(
-          '<link rel="stylesheet" href="index.css" />',
-          `<link rel="stylesheet" href="${cssUri}" />`
+          '<head>',
+          `<head>
+            ${csp}
+            <meta name="nonce" content="${nonce}">
+          `
         );
 
+        // 检查是否存在dist/webview目录（构建后的环境）
+        const webviewDistPath = path.join(
+          this._extensionUri.fsPath,
+          'dist',
+          'webview'
+        );
+
+        if (fs.existsSync(webviewDistPath)) {
+          // 获取dist/webview目录下的所有js和css文件
+          const files = fs.readdirSync(webviewDistPath);
+          const jsFiles = files.filter(file => file.endsWith('.js') && !file.endsWith('.map.js'));
+          const cssFiles = files.filter(file => file.endsWith('.css') && !file.endsWith('.map.css'));
+
+          // 替换script标签
+          if (jsFiles.length > 0) {
+            const jsPath = path.join(webviewDistPath, jsFiles[0]); // 使用第一个js文件
+            const jsUri = webview.asWebviewUri(vscode.Uri.file(jsPath));
+            htmlContent = htmlContent.replace(
+              /<script[^>]*src=["']\/src\/main\.ts["'][^>]*><\/script>/,
+              `<script nonce="${nonce}" src="${jsUri}"></script>`
+            );
+          }
+
+          // 添加所有css文件
+          const cssLinks = cssFiles.map(cssFile => {
+            const cssPath = path.join(webviewDistPath, cssFile);
+            const cssUri = webview.asWebviewUri(vscode.Uri.file(cssPath));
+            return `  <link rel="stylesheet" href="${cssUri}" />`;
+          }).join('\n');
+
+          if (cssLinks) {
+            htmlContent = htmlContent.replace(
+              '</head>',
+              `${cssLinks}\n            </head>`
+            );
+          }
+        }
+
+        // 添加VSCode API注入脚本
+        const vscodeApiScript = `
+          <script nonce="${nonce}">
+            // 提供VSCode API给Vue应用
+            const vscode = acquireVsCodeApi();
+            window.acquireVsCodeApi = function() {
+              return vscode;
+            };
+          </script>
+        `;
         htmlContent = htmlContent.replace(
-          '<script src="index.js"></script>',
-          `<script src="${jsUri}"></script>`
+          '<body>',
+          `<body>
+            ${vscodeApiScript}
+          `
         );
 
         return htmlContent;
