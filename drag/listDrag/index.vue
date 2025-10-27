@@ -5,7 +5,7 @@
       <left-panel
         :list="mappedLeftList"
         :config="config?.leftPanel"
-        name="leftPanel"
+        :propsMap="{ labelKey, valueKey, canChooseKey }"
         @outhandleDrop="handleLeftDrop"
       >
         <template #panel-header>
@@ -21,7 +21,7 @@
       <right-panel
         v-model="mappedRightList"
         :config="config?.rightPanel"
-        name="rightPanel"
+        :propsMap="{ labelKey, valueKey, canChooseKey }"
         @remove="remove"
         @outhandleDrop="handleRightDrop"
       >
@@ -215,12 +215,11 @@ const remove = (field: DragItem) => {
   }
 };
 
-// 还原原始数据格式
 // 还原传入的数据格式
 const getRawData = (field: DragItem): RawItem => {
   return {
-    [valueKey]: field.id,
-    [labelKey]: field.title,
+    [valueKey]: field.id ?? '',
+    [labelKey]: field.title ?? '',
     [canChooseKey]: field.canChoose !== undefined ? field.canChoose : true
   };
 };
@@ -228,7 +227,7 @@ const getRawData = (field: DragItem): RawItem => {
 
 <style scoped lang="scss">
 .cross-table-container {
-  width: 700px;
+  width: 648px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -236,16 +235,20 @@ const getRawData = (field: DragItem): RawItem => {
   .left-panel {
     flex: 1;
     // padding: 16px;
-    width: 350px;
+    width: 324px;
     border: 1px solid #ddd;
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
     box-sizing: border-box;
   }
   .right-panel {
     flex: 1;
     // padding: 16px;
-    width: 350px;
+    width: 324px;
     border: 1px solid #ddd;
     border-left: none;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
     box-sizing: border-box;
   }
 }

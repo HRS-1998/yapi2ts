@@ -4,7 +4,7 @@
       <h4 v-if="config.showTitle !== false">
         <span>{{ config.title }}</span>
       </h4>
-      <h4 v-if="config?.showSummary !== false">{{ list.length }} 项</h4>
+      <div v-if="config?.showSummary !== false" class="header-right">{{ list.length }}</div>
     </slot>
   </div>
 </template>
@@ -22,10 +22,14 @@ console.log(props, 'header');
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   background-color: #f7f5fa;
   color: #333;
   height: 40px;
-  padding: 0 25px;
+  padding: 0 12px;
+  .header-right {
+    color: #909399;
+    font-size: 12px;
+  }
 }
 </style>

@@ -1,8 +1,8 @@
 <template>
   <list-drag v-model:left-panel="leftList" v-model:right-panel="rightList" :config="config">
-    <template #left-panel-header>
+    <!-- <template #left-panel-header>
       <h4>自定义header</h4>
-    </template>
+    </template> -->
     <template #custom-item="{ item }">
       <div v-if="item.idreset === 3">
         <img src="https://admin.ct108.net:777/images/dingbtn.png" />
@@ -15,6 +15,10 @@
 import { ref } from 'vue';
 import ListDrag from '../listDrag/index.vue';
 import type { ConfigType } from '../listDrag/types/index';
+const searchFn = (query: string, item: any): boolean => {
+  return item.idreset == query || item.titlereset.toLowerCase().includes(query);
+};
+
 // 配置项 用于重定义列表字段
 const config = ref<ConfigType>({
   cls: 'drag-list-container',
@@ -22,9 +26,11 @@ const config = ref<ConfigType>({
   leftPanel: {
     showTitle: true,
     showSummary: true,
-    showSearch: true
+    showSearch: true,
+    searchFn: searchFn
   },
   rightPanel: {
+    searchFn: searchFn
     // showLeftIcon: false,
     // showRightIcon: false
   }
@@ -43,7 +49,7 @@ const leftList = ref<any[]>([
   },
   {
     idreset: 2,
-    titlereset: 'bbbbbbbb',
+    titlereset: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     choosereset: true
   },
   { idreset: 3, titlereset: 'cccccccc', choosereset: true },

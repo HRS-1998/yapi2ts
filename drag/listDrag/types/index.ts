@@ -1,3 +1,4 @@
+import { Search } from '@element-plus/icons-vue';
 export interface ListItem {
   id?: string | number;
   title?: string;
@@ -14,6 +15,7 @@ export interface PanelConfig {
   showSearch?: boolean;
   showLeftIcon?: boolean; // 显示左侧图标
   showRightIcon?: boolean; // 显示右侧图标
+  searchFn?: (query: string, item: ListItem) => boolean;
 }
 
 export interface ConfigType {

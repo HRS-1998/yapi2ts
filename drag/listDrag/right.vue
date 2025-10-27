@@ -14,6 +14,8 @@
         clearable
       />
     </div>
+    <el-divider class="divider" />
+
     <div
       class="field-list"
       @dragover="handleListDragOver"
@@ -26,7 +28,6 @@
         :class="['field-item', { dragging: dragItem?.item.id === item.id }]"
         :draggable="isItemDraggable(item)"
         @dragstart="handleDragStart(item, index, $event)"
-        @dragover="handleDragOver(index, $event)"
         @dragenter="handleDragEnter(index, $event)"
         @dragend="handleDragEnd"
       >
@@ -54,7 +55,7 @@
   </div>
 </template>
 <script lang="ts" setup>
-import { ref, computed } from 'vue';
+import { ref, computed, useSlots } from 'vue';
 import type { Placement } from 'element-plus';
 import { Search } from '@element-plus/icons-vue';
 import type { ListItem, PanelConfig } from './types/index';
@@ -62,10 +63,11 @@ import { bigObjDeepClone } from './utils/index';
 import { useMergeConfig } from './hooks/useMergeConfig';
 import DragHeader from './components/header.vue';
 import ListContent from './components/listcontent.vue';
+import { useDragPreview } from './hooks/useDragPreview';
 
 const props = defineProps<{
-  name?: string;
   config?: PanelConfig;
+  propsMap?: Record<string, string>;
 }>();
 
 const defaultConfig: PanelConfig = {
@@ -80,6 +82,7 @@ const defaultConfig: PanelConfig = {
 };
 
 const { mergedConfig } = useMergeConfig(props.config, defaultConfig);
+const { dragPreview, createDragPreview, waitForImagesAndReturnPreview } = useDragPreview();
 
 const emit = defineEmits(['remove', 'outhandleDrop']);
 const list = defineModel<ListItem[]>({
@@ -94,13 +97,29 @@ const dragTargetIndex = ref<number | null>(null);
 const showTopIndicator = ref(false);
 const showBottomIndicator = ref(false);
 
+const { valueKey = 'id', labelKey = 'title', canChooseKey = 'canChoose' } = props.propsMap || {};
+
+const getRawData = (field: ListItem) => {
+  return {
+    [valueKey]: field.id,
+    [labelKey]: field.title,
+    [canChooseKey]: field.canChoose
+  };
+};
 // 不区分大小写的搜索过滤
 const filteredList = computed(() => {
   if (!searchKeyword.value.trim()) {
     return list.value;
   }
   const keyword = searchKeyword.value.toLowerCase();
-  return list.value.filter((item) => item.title.toLowerCase().includes(keyword));
+  return list.value.filter((item) => {
+    if (mergedConfig.value.searchFn && typeof mergedConfig.value.searchFn === 'function') {
+      // 如果配置了自定义搜索函数，则优先使用
+      const result = mergedConfig.value.searchFn(keyword, getRawData(item));
+      return result;
+    }
+    return item.title!.toLowerCase().includes(keyword);
+  });
 });
 
 // 判断是否可拖拽
@@ -108,8 +127,9 @@ const isItemDraggable = (item: ListItem): boolean => {
   return item.canChoose !== undefined ? item.canChoose : true;
 };
 
+const slots = useSlots();
 // 行维度拖拽开始
-const handleDragStart = (item: ListItem, index: number, event: DragEvent) => {
+const handleDragStart = async (item: ListItem, index: number, event: DragEvent) => {
   if (!isItemDraggable(item)) {
     event.preventDefault();
     return;
@@ -117,34 +137,103 @@ const handleDragStart = (item: ListItem, index: number, event: DragEvent) => {
   const dataTransfer = event.dataTransfer;
   if (!dataTransfer) return;
   dragItem.value = { item, index };
-  console.log(dragItem.value, 'dragItem.value');
-  dataTransfer.setData('text/plain', JSON.stringify({ list: [item], dragfrom: props.name })); //多层嵌套时，可以在嵌套页面用@dragDrop 获取数据
+  dataTransfer.setData(
+    'text/plain',
+    JSON.stringify({ list: [item], dragfrom: mergedConfig.value.name })
+  ); //多层嵌套时，可以在嵌套页面用@dragDrop 获取数据
+  // 创建包含完整 slot 内容的拖拽预览
+  createDragPreview([item], (props) => {
+    // 传递父组件的 custom-item slot
+    return slots['custom-item'] ? slots['custom-item'](props) : props.field.title;
+  });
+
+  // 等待图片加载完成后再设置拖拽图像
+  if (dragPreview.value) {
+    try {
+      // 等待图片加载完成
+      const previewElement = await waitForImagesAndReturnPreview();
+      if (previewElement && dataTransfer) {
+        dataTransfer.setDragImage(previewElement, 0, 0);
+      }
+    } catch (error) {
+      // 如果等待出错，直接使用当前预览元素
+      if (dragPreview.value && dataTransfer) {
+        dataTransfer.setDragImage(dragPreview.value, 0, 0);
+      }
+    }
+  }
   dataTransfer.effectAllowed = 'move';
 };
 
-// 行维度拖拽经过容器
+// 拖拽经过容器
 const handleListDragOver = (event: DragEvent) => {
   event.preventDefault();
   event.dataTransfer!.dropEffect = 'move';
-};
+  //这里判下，如果当前鼠标在拖拽框内，如果在第一个元素上方，显示第一个元素的上指示器，如果在最后一个元素下方，显示最后一个元素的下指示器
+  // 同时更新指示器位置
+  const container = (event.target as HTMLElement).closest('.field-list');
+  if (!container) return;
 
-// 行维度项拖拽经过
-const handleDragOver = (index: number, event: DragEvent) => {
-  event.preventDefault();
-  //   if (dragItem.value && dragItem.value.index !== index) {
-  dragOverIndex.value = index;
-  dragTargetIndex.value = index;
-  // 确定显示上指示器还是下指示器
-  const rect = (event.target as HTMLElement).getBoundingClientRect();
-  const itemHeight = rect.height;
-  const offsetY = event.clientY - rect.top;
-  // 如果鼠标在元素上半部分，显示上指示器；否则显示下指示器
-  if (offsetY < itemHeight / 2) {
+  const items = container.querySelectorAll('.field-item');
+  if (items.length === 0) {
+    // 当列表为空时，重置状态
+    dragOverIndex.value = null;
+    dragTargetIndex.value = null;
+    showTopIndicator.value = false;
     showBottomIndicator.value = false;
+    return;
+  }
+
+  const firstItem = items[0];
+  const lastItem = items[items.length - 1];
+
+  const firstRect = firstItem.getBoundingClientRect();
+  const lastRect = lastItem.getBoundingClientRect();
+
+  // 如果鼠标在容器顶部区域（第一个元素上方）
+  if (event.clientY <= firstRect.top) {
+    dragOverIndex.value = 0;
+    dragTargetIndex.value = 0;
     showTopIndicator.value = true;
-  } else {
+    showBottomIndicator.value = false;
+    return;
+  }
+
+  // 如果鼠标在容器底部区域（最后一个元素下方）
+  if (event.clientY >= lastRect.bottom) {
+    dragOverIndex.value = list.value.length - 1;
+    dragTargetIndex.value = list.value.length - 1;
     showTopIndicator.value = false;
     showBottomIndicator.value = true;
+    return;
+  }
+
+  // 如果在中间区域，计算应该显示哪个元素的指示器
+  const mouseY = event.clientY;
+
+  // 查找鼠标悬停的元素
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const rect = item.getBoundingClientRect();
+
+    if (mouseY >= rect.top && mouseY <= rect.bottom) {
+      dragOverIndex.value = i;
+      dragTargetIndex.value = i;
+
+      // 计算在元素中的相对位置
+      const itemHeight = rect.height;
+      const offsetY = mouseY - rect.top;
+
+      // 如果鼠标在元素上半部分，显示上指示器；否则显示下指示器
+      if (offsetY < itemHeight / 2) {
+        showBottomIndicator.value = false;
+        showTopIndicator.value = true;
+      } else {
+        showTopIndicator.value = false;
+        showBottomIndicator.value = true;
+      }
+      return;
+    }
   }
 };
 
@@ -180,14 +269,20 @@ const handleListDrop = (event: DragEvent) => {
     if (list.value.length === 0) {
       toIndex = 0;
     }
-    if (toIndex === null) return;
+    if (toIndex === null) {
+      return;
+    }
     if (showBottomIndicator.value) {
       toIndex += 1;
     }
     emit('outhandleDrop', { list: dragInData, index: toIndex });
   }
   // 内部排序
-  if (name === props.name && dragItem.value !== null && dragTargetIndex.value !== null) {
+  if (
+    name === mergedConfig.value.name &&
+    dragItem.value !== null &&
+    dragTargetIndex.value !== null
+  ) {
     const fromIndex = dragItem.value.index;
     let toIndex = dragTargetIndex.value;
     // 根据指示器类型调整目标索引
@@ -226,14 +321,15 @@ const remove = (field: ListItem) => {
 <style lang="scss" scoped>
 .right-drag {
   --indicator-bg-color: skyblue; // 指示器背景颜色
+  --field-color: #333; // 字段字体颜色
   --field-border-color: #ddd; // 字段边框颜色
   --field-bg-color: #fff; // 字段背景色
-  --field-hover-bg-color: #f9f9f9; // 字段hover背景颜色
+  --field-hover-bg-color: #409eff; // 字段hover背景颜色
+  --field-hover-color: #409eff; // 字段hover背景颜色
+  --field-hover-border-color: #409eff; // 字段hover边框颜色
   --field-disabled-color: #cbcbcb; // 字段禁用字体颜色
   height: 100%;
-  width: 100%;
-  //   width: 300px;
-  //   margin: 0 auto;
+  width: 324px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -241,29 +337,33 @@ const remove = (field: ListItem) => {
   user-select: none;
   .search-box {
     width: 300px;
-    margin-bottom: 16px;
+    margin: 0 auto 12px;
+  }
+  .divider {
+    margin: 0;
+    opacity: 0.5;
   }
   .field-list {
     height: 400px;
-    margin-right: -15px;
-    padding-right: 10px;
+    width: 321px;
     overflow: hidden;
     overflow-y: auto;
+    margin-bottom: 12px;
+    padding: 12px;
     .field-item {
       position: relative;
       width: 300px;
       padding: 6px 10px;
-      margin: 0 0 10px 0;
+      margin: 0 auto 10px;
       border: 1px solid var(--field-border-color);
       border-radius: 4px;
       box-sizing: border-box;
       background: var(--field-bg-color);
+      color: var(--field-color);
       cursor: grab;
-      &:first-child {
-        margin-top: 8px;
-      }
       &:hover {
-        background: var(--field-hover-bg-color);
+        color: vaar(--field-hover-color);
+        border-color: var(--field-hover-border-color);
       }
 
       &[draggable='false'] {
@@ -271,11 +371,13 @@ const remove = (field: ListItem) => {
         cursor: not-allowed;
         &:hover {
           background: #f5f5f5;
+          color: var(--field-color);
+          border-color: var(--field-border-color);
         }
       }
 
       &.dragging {
-        opacity: 0.5;
+        opacity: 1;
       }
       .field-item-container {
         display: flex;

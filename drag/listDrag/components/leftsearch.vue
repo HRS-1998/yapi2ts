@@ -23,6 +23,7 @@ const filterFieldHandle = debounce(() => {
 </script>
 <style lang="scss" scoped>
 .search-box {
-  margin-bottom: 16px;
+  width: 300px;
+  margin: 0 auto 12px;
 }
 </style>
